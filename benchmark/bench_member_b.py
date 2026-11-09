@@ -1,4 +1,4 @@
-"""Benchmark: Python loops vs NumCompute vectorised implementations (Yi Su's modules).
+"""Benchmark: Python loops vs NumCompute vectorised implementations (Member B modules).
 
 Run from the project root:
 
@@ -9,7 +9,7 @@ What it does
 For each task it times a plain-Python loop version and the vectorised
 NumCompute version on the same random data, checks both give the same
 answer, and prints a Markdown table (also saved to
-``benchmark/results_yi_su.md``) together with environment notes.
+``benchmark/results_member_b.md``) together with environment notes.
 
 Timing method: ``timeit`` with several repeats; we report the *median*
 time of one call, which is less sensitive to background noise than the mean.
@@ -226,9 +226,9 @@ def main():
         "(`sorted`, `heapq`, `sum`, `for`).",
     ])
 
-    report = f"# Benchmark results (Yi Su)\n\n{table}\n\n## Environment\n\n{env}\n"
+    report = f"# Benchmark results (Member B)\n\n{table}\n\n## Environment\n\n{env}\n"
     print("\n" + report)
-    out = ROOT / "benchmark" / "results_yi_su.md"
+    out = ROOT / "benchmark" / "results_member_b.md"
     out.write_text(report, encoding="utf-8")
     print(f"Saved to {out}")
 

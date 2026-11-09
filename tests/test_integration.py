@@ -28,7 +28,7 @@ def test_csv_reader_streams_bounded_chunks(tmp_path):
     np.testing.assert_allclose(np.vstack(chunks), [[1, 2], [3, 4], [5, 6]])
 
 
-def test_feature_union_combines_hongyu_liu_transformers():
+def test_feature_union_combines_member_a_transformers():
     X = np.array([[1.0, 10.0], [2.0, 20.0], [3.0, 30.0]])
     union = nc.make_union(nc.StandardScaler(), nc.MinMaxScaler())
     transformed = union.fit_transform(X)

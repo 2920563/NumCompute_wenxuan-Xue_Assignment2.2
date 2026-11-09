@@ -1,149 +1,162 @@
-# NumCompute
+# NumCompute-Stream
 
-A scientific computing toolkit built with Python and NumPy. It includes CSV
-input, preprocessing, sorting and selection, ranking, descriptive statistics,
-evaluation metrics, numerical derivatives and composable pipelines.
+NumCompute-Stream extends the original NumCompute toolkit with a NumPy-only decision tree and a modular streaming-learning framework. Incoming data is processed in chunks, preprocessing and metrics update incrementally, and the decision tree retrains whenever its configurable buffer reaches a threshold. Matplotlib is used only for the required visualisations; no scikit-learn, pandas, PyTorch, or external ML library is used.
 
-| Team member | Main responsibilities |
-|---|---|
-| Hongyu Liu | Data I/O, preprocessing, numerical utilities and video demonstration |
-| Yi Su | Sorting, searching, ranking and statistics |
-| Wenxuan Xue | Metrics, numerical differentiation, pipelines and integration |
+## Assignment deliverables
 
-## Installation and tests
+- `numcompute_stream/`: streaming package with all required modules
+- `tests/`: 77 streaming tests plus the 120 original NumCompute tests
+- `demo/stream_demo.ipynb`: required notebook demo
+- `demo/stream_demo.py`: script version of the same demo
+- `benchmark/benchmark_stream.py`: loop/vectorised and buffer-size benchmarks
+- `benchmark/results_stream.md`: measured benchmark results
+- `output/pdf/NumCompute_Stream_Report.pdf`: four-page technical report
+- `video/DEMO_SCRIPT.md`: timed outline for the required five-minute recording
 
-Requires Python 3.10 or newer. The package's only runtime dependency is NumPy.
-The optional development and demo dependencies provide pytest and Jupyter.
-Create your own environment from the repository root:
+## Package structure
 
-```powershell
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -e ".[dev,demo]"
-.\.venv\Scripts\python.exe -m pytest -q
+```text
+numcompute_stream/
+├── __init__.py
+├── io.py              # bounded CSV chunks
+├── preprocessing.py   # incremental scaler, imputer, encoder
+├── stats.py           # streaming and rolling statistics
+├── metrics.py         # cumulative and rolling metrics
+├── tree.py            # decision tree + buffered retraining
+├── pipeline.py        # chained partial_fit
+├── stream.py          # orchestration, metrics, memory logs
+└── visualise.py       # reusable Matplotlib plots
 ```
 
-On macOS/Linux, use `python3 -m venv .venv` and `.venv/bin/python` for the
-remaining commands. Windows 11 has been tested; the other setup commands
-have not been tested here.
+## Installation
 
-## Quickstart
-
-Run the complete example, including numerical assertions:
+Python 3.10 or later is required. With `uv`:
 
 ```powershell
-.\.venv\Scripts\python.exe demo/integrated_quickstart.py
+uv sync --extra dev
 ```
 
-For the notebook, install the project kernel and open JupyterLab:
+If the project is already inside an activated virtual environment:
 
 ```powershell
-.\.venv\Scripts\python.exe -m ipykernel install --sys-prefix --name python3 --display-name "Python (NumCompute)"
-.\.venv\Scripts\python.exe -m jupyterlab demo/quickstart.ipynb
+uv pip install -e ".[dev]"
 ```
 
-Select **Python (NumCompute)**, then restart the kernel and run all cells.
-The notebook can be launched from the project root or `demo/`. It reads the
-included six-row `demo/data/students.csv` and demonstrates missing values,
-preprocessing, Pipeline fit/predict, tied ranks, streaming statistics,
-classification metrics, gradients/Jacobian and benchmarks.
-
-The classification metrics are illustrative in-sample results. The teaching
-estimator thresholds the first feature at its fitted mean.
-
-[Demo video](https://drive.google.com/file/d/10lPcQVu3qRCF2k28e1t6TSZvF5zuGlhQ/view?usp=sharing)
+## Quick start
 
 ```python
 import numpy as np
-import numcompute as nc
 
-X = np.array([[1.0, np.nan], [2.0, 3.0], [4.0, 6.0]])
-pipe = nc.make_pipeline(nc.Imputer(fill_value=0.0), nc.StandardScaler())
-prepared = pipe.fit_transform(X)
-new_prepared = pipe.transform([[3.0, 4.0]])
-largest = nc.topk(prepared[:, 0], 2, return_indices=False)
-ranks = nc.rank_values([60, 78, 85, 92, 92, 95], method="average")
-gradient = nc.gradient(lambda z: np.sum(z**2), [1.0, 2.0])
+from numcompute_stream import DecisionTreeClassifier, Pipeline, StandardScaler
+
+pipe = Pipeline([
+    ("scale", StandardScaler()),
+    ("model", DecisionTreeClassifier(max_depth=5, buffer_size=100)),
+])
+
+rng = np.random.default_rng(42)
+X = rng.normal(size=(300, 4))
+y = (X[:, 0] + X[:, 1] > 0).astype(int)
+
+for start in range(0, len(X), 25):
+    pipe.partial_fit(X[start:start + 25], y[start:start + 25], classes=[0, 1])
+
+prediction = pipe.predict(X[-25:])
 ```
 
-## API and conventions
+Before the first buffer-triggered retrain, the tree has no completed model and `predict` raises `RuntimeError`. After that point, new chunks accumulate while predictions continue to use the most recently completed tree.
 
-| Module / owner | Main API | Input/output conventions |
-|---|---|---|
-| io / Hongyu Liu | load_csv, CSVReader, iter_csv | NumPy arrays; delimiter/dtype/missing-value options; chunk_size bounds buffered CSV rows |
-| preprocessing / Hongyu Liu | Imputer (SimpleImputer), StandardScaler, MinMaxScaler, OneHotEncoder | 2-D `(samples, features)`; fit returns self; transform preserves rows; one-hot may expand columns |
-| utils / Hongyu Liu | softmax, logsumexp, sigmoid, relu, euclidean_distance, batch_iterator, topk_indices | Activations/distances are vectorised; softmax defaults to last axis; batch_iterator yields row batches |
-| sort_search / Yi Su | stable_sort, multikey_sort, topk, quickselect, binary_search | topk returns `(values, indices)` unless return_indices=False; quickselect k is zero-based; binary_search returns insertion index and existence |
-| rank / Yi Su | rank_values, percentile | Ascending ranks start at 1; average/dense/ordinal tie methods; percentile q in `[0,100]` |
-| stats / Yi Su | mean, median, var, std, describe, histogram, quantile, RunningStats | axis=0 reduces rows; nan_policy controls NaNs where supported; quantile q in `[0,1]`; var/std default ddof=0, describe defaults ddof=1 |
-| metrics / Wenxuan Xue | accuracy, precision, recall, f1, mse, confusion_matrix, roc_curve, roc_auc_score | 1-D matching label arrays; confusion rows=true, columns=predicted; regression arrays must match shape |
-| optim / Wenxuan Xue | gradient, jacobian | Scalar function gradient has x.shape; Jacobian shape is F(x).shape + x.shape; central differences by default |
-| pipeline / Wenxuan Xue | Pipeline, make_pipeline, FeatureUnion, make_union | Intermediate steps implement fit/transform; final estimator may implement predict; FeatureUnion concatenates feature columns |
-| benchmarking / Wenxuan Xue | benchmark, benchmark_many, format_results | Per-call timings in seconds; configurable repeat, number and warmup |
+## Decision-tree design
 
-`nc.rank` is the module; call `nc.rank_values(...)` or `nc.rank.rank(...)`.
-Statistics reduce over rows with `axis=0`; `axis=None` reduces all values.
-Quantiles use fractions in [0,1], while percentiles use [0,100]. The default
-variance is the population variance (`ddof=0`); `describe` defaults to `ddof=1`.
-Impute missing features before scaling, and reuse fitted preprocessors for
-new data rather than fitting them again.
+`DecisionTreeClassifier` supports:
 
-## Benchmarks
+- `criterion="gini"` or `criterion="entropy"`
+- `max_depth`
+- `min_samples_split`
+- `max_features=None`, integer, fraction, `"sqrt"`, or `"log2"`
+- `buffer_size`
+- reproducible feature subsampling with `random_state`
+
+At each node the implementation loops only over selected features. For each feature, samples are sorted once, cumulative class counts evaluate every valid threshold as NumPy arrays, and the threshold with maximum information gain is selected. Missing feature values are routed to the larger child and that decision is stored in the node. Batch prediction traverses arrays of sample indices node by node rather than looping over samples.
+
+## Streaming components
+
+### Preprocessing
+
+- `StandardScaler.partial_fit` uses Chan/Welford mean and variance updates.
+- `MinMaxScaler.partial_fit` maintains running extrema.
+- `Imputer.partial_fit` updates mean, median, most-frequent, or constant estimates.
+- `OneHotEncoder.partial_fit` expands categories as new values arrive.
+
+### Statistics
+
+`StreamingStats.update_stats` maintains count, mean, population variance, standard deviation, minimum, and maximum. Exact quantiles and histograms are available from retained observations. Supplying `window_size` makes every returned statistic a rolling-window statistic.
+
+### Metrics
+
+Stateful metrics implement the common API:
+
+```python
+metric.update(y_true_chunk, y_pred_chunk)
+value = metric.result()
+metric.reset()
+```
+
+Available metrics include cumulative or rolling accuracy, precision, recall, F1, confusion matrix, and binary AUC. Confusion matrices expand when previously unseen classes arrive unless a fixed label set was configured.
+
+### Pipeline and trainer
+
+`Pipeline.partial_fit` updates and transforms each preprocessing step before updating the final estimator. `StreamTrainer` supports `fit_chunk`, `score_chunk`, and prequential `process_chunk` evaluation. Each scored chunk logs:
+
+- chunk and cumulative accuracy
+- configured metric results
+- processed sample count
+- recursive model memory footprint
+- completed tree retraining count
+
+## Demo
+
+Run either the notebook or script:
 
 ```powershell
-.\.venv\Scripts\python.exe benchmark/bench_integrated.py
-.\.venv\Scripts\python.exe benchmark/bench_member_b.py
-.\.venv\Scripts\python.exe benchmark/benchmarking.py
+uv run python demo/stream_demo.py
 ```
 
-The integrated comparison below was measured on 17 October 2026 with
-Windows 11, CPython 3.14.6, NumPy 2.5.4 and an Intel CPU with 20 logical cores.
-It checks matching results before timing, uses seed 42, and reports median
-time per call over five repeats with three calls per repeat and one warmup.
-Input/list preparation, scaler fitting and CSV I/O are outside the timing.
+The demo generates a deterministic CSV file, reloads it through `iter_csv` in 40-row chunks, and compares pipelines with `buffer_size=80` and `buffer_size=160`. It saves:
 
-| Task | Data size | Python baseline (ms) | NumCompute (ms) | Speed-up | Same result |
-|---|---|---:|---:|---:|:---:|
-| StandardScaler.transform | 20,000 x 4 | 7.4222 | 0.5024 | 14.77x | yes |
-| stable softmax | 20,000 x 4 | 12.4510 | 1.5772 | 7.89x | yes |
-| top-k | n=20,000, k=10 | 1.9376 | 0.0462 | 41.94x | yes |
-| accuracy | n=20,000 | 0.5824 | 0.0204 | 28.50x | yes |
+- `demo/output/accuracy_over_time.png`
+- `demo/output/buffer_comparison.png`
+- `demo/output/latest_predictions.png`
 
-The top-k baseline performs a full Python sort; NumCompute uses partial
-selection. That comparison includes an algorithm difference as well as
-vectorisation. Both softmax implementations subtract the row maximum.
+On the reference run, mean scored-chunk accuracy was approximately 0.737 for buffer 80 and 0.793 for buffer 160. Exact timing is machine-dependent.
 
-The saved measurements and environment are in
-[results_integrated.md](benchmark/results_integrated.md).
-Yi Su's larger seven-task comparison is in
-[results_yi_su.md](benchmark/results_yi_su.md), produced by `bench_member_b.py`.
-That top-k comparison uses `heapq.nlargest` on one million values, so it has
-a different baseline and input size from the integrated table and video.
-The video and the saved tables were measured in separate runs. Times and
-speed ratios vary with the environment; the numerical results are checked.
+## Testing
 
-## Project layout
+```powershell
+uv run pytest -q
+```
+
+Reference result:
 
 ```text
-numcompute/                 # ten modules and the public API
-tests/                      # 122 unit and integration cases
-benchmark/                  # comparison scripts and saved measurements
-demo/
-  data/students.csv         # synthetic CSV input
-  quickstart.ipynb          # notebook with saved outputs
-  integrated_quickstart.py  # executable example
-  build_notebook.py         # notebook generation from the example sections
-  verify_demo.py            # fresh-kernel checks from root and demo/
-  demo_yi_su.ipynb          # algorithms/statistics examples
-  demo_wenxuan_xue.ipynb     # metrics/optimisation/pipeline examples
-pyproject.toml
+197 passed
 ```
 
-To check the notebook in fresh kernels:
+The 77 Assignment 2.2 tests cover tree learning, Gini and entropy, multiclass labels, NaNs, buffering, feature subsampling, incremental preprocessing, numerical stability, rolling statistics, rolling metrics, AUC ties, pipeline integration, logging, bounded CSV reads, and saved visualisations.
+
+## Benchmarking
 
 ```powershell
-.\.venv\Scripts\python.exe demo/verify_demo.py
+uv run python benchmark/benchmark_stream.py
 ```
 
-When changing the demo source, regenerate the notebook with
-`python demo/build_notebook.py`, then run `python demo/verify_demo.py --write`
-to verify it and save the outputs.
+The script verifies that loop and vectorised statistics return the same answer, then reports their median runtime. It also measures prequential accuracy, training time, and retraining count for tree buffers of 40, 120, and 240 samples. Results are written to `benchmark/results_stream.md`.
+
+## Numerical and API safeguards
+
+- Type, shape, empty-input, and feature-count validation uses informative exceptions.
+- Infinite feature values are rejected; NaNs are handled by preprocessing and tree routing.
+- Zero-variance features use a scale of one.
+- AUC assigns average ranks to tied scores.
+- Zero denominators in precision, recall, F1, and normalised confusion matrices are handled explicitly.
+- `classes` must remain stable across incremental tree updates when provided.

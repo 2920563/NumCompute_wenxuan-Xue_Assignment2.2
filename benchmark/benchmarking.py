@@ -1,4 +1,4 @@
-"""Command-line benchmark for Wenxuan Xue's NumCompute modules."""
+"""Command-line benchmark for the Member C NumCompute modules."""
 
 from __future__ import annotations
 

@@ -100,7 +100,7 @@ def test_standard_scaler_fit_returns_self():
     result = scaler.fit(X)
 
     assert result is scaler
-
+    
 def test_minmax_scaler():
     X = np.array([
         [1, 10],
@@ -287,3 +287,4 @@ def test_one_hot_encoder_ignore_unknown():
     ])
 
     assert np.array_equal(result, expected)
+
